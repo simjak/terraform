@@ -1,0 +1,50 @@
+version: 0.2
+phases:
+  install:
+    commands: 
+      - echo Install phase started...
+  pre_build:
+    commands:
+      - set -e
+      - echo Pre_build phase started...
+      - printenv
+      - ls -la
+      - if [ -z "$TAG" ]; then tag=$(git describe --tags $(git rev-list --tags --max-count=1)); else tag=$TAG; fi && echo Using tag - $tag
+      - environment=$(echo $tag | cut -d'/' -f2)
+      - service=$(echo $tag | cut -d'/' -f3)
+      - version=$(echo $tag | cut -d'/' -f4)
+      - bucket_name=repo.terraform-$AWS_ACCOUNT_ID
+      - bucket_url=s3://$bucket_name/$environment/$service
+      - bucket_url_version=$bucket_url/$version
+      - echo Checking current version...
+      - |
+        if aws --region eu-west-1 s3api head-object --bucket $bucket_name --key $environment/$service/version.zip 2>&1 > /dev/null; then
+          echo "version.zip found in S3 bucket, skipping creation and upload...";
+        else
+          echo "version.zip not found in S3 bucket, creating and uploading...";
+          zip -r version.zip config/
+          aws s3 cp version.zip $bucket_url/;
+        fi
+      - local_version=$(cat config/.version) 
+      - aws s3 cp $bucket_url/version.zip tmp/version.zip && cd tmp && unzip version.zip
+      - s3_version=$(cat config/.version) && cd ..
+      - echo "Local version $local_version"
+      - echo "S3 version $s3_version"
+      - |
+        if [ "$local_version" = "$s3_version" ]; then 
+          echo "Build already exists with the same version. Stopping the build..."; 
+          exit 0;
+        else
+          echo cloning repo to S3 $bucket_url_version
+          zip -r repo.zip .
+          aws s3 cp repo.zip $bucket_url_version/ 
+          echo "Updating version in S3 bucket...";
+          zip -r version.zip config/ && aws s3 cp version.zip $bucket_url/
+          if [ $? -eq 0 ]; then echo "S3 copy successful"; else echo "S3 copy failed"; fi
+        fi
+  build:
+    commands:
+      - echo Build started on `date`
+  post_build:
+    commands:
+      - echo Build completed on `date`

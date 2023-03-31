@@ -1,0 +1,33 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo "Retrieving CloudFront distribution ID..."
+      - distribution_id=$(aws --region eu-west-1 cloudfront list-distributions --query "DistributionList.Items[0].Id" --output text)
+      - echo "Distribution ID $distribution_id"
+      - echo "Getting current time..."
+      - NOW=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+      - echo "Current time $NOW"
+      - echo "Creating invalidation JSON file..."
+      - |
+        cat > invalidation.json << EOF
+        {
+            "Paths": {
+                "Quantity": 1,
+                "Items": ["/*"]
+            },
+            "CallerReference": "$NOW"
+        }
+        EOF
+      - echo "Submitting invalidation request..."
+      - aws --region eu-west-1 cloudfront create-invalidation --distribution-id $distribution_id --invalidation-batch file://invalidation.json
+      - echo "Cleaning up..."
+      - rm invalidation.json
+      - echo "Invalidation request complete."
+      - echo Build completed on `date`
+
+artifacts:
+  files:
+    - '**/*'

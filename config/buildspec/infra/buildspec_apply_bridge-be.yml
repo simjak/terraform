@@ -1,0 +1,41 @@
+version: 0.2
+
+phases:
+  install:
+    commands: 
+      - printenv
+      - echo Install phase started...
+      - ls -la
+      - VERSION_FILE="config/.version"
+      - VERSION=$(cat "$VERSION_FILE") && echo $VERSION
+      - BUCKET="repo.terraform-188857797225"
+      - KEY="$ENVIRONMENT/$SERVICE/$VERSION/repo.zip"
+      - DESTINATION="repo.zip"
+      - echo Download source from s3://$BUCKET/$KEY to $DESTINATION
+      - aws s3 cp "s3://$BUCKET/$KEY" "$DESTINATION"
+      - mkdir terraform
+      - cd terraform && unzip ../"$DESTINATION" 
+  pre_build:
+    commands:
+      - echo Pre_build phase started...
+      - pwd
+      - ls -la
+      - echo Setting local variables...
+      - export $(xargs < envs/$SERVICE/$ENVIRONMENT.env)
+      - echo "NPM installation..."
+      - npm ci --cache .npm
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - ls -la
+      - cd src/ou/workloads/bridge-be
+      - echo Deploying stack - bridge-vpc
+      - cdktf deploy bridge-vpc --auto-approve
+      - echo Deploying components in parallel...
+      - cdktf deploy bridge-bastion bridge-sns bridge-bucket --auto-approve
+      - cdktf deploy bridge-rds --auto-approve
+      - cdktf deploy bridge-ecs --auto-approve
+  post_build:
+    commands:
+      - echo Build completed on `date`

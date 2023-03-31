@@ -1,0 +1,47 @@
+version: 0.2
+#https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
+
+env: 
+  variables:
+    #The ref of the main branch we work against
+    MAIN_BRANCH_REF: 'refs/heads/main'
+    MAIN_BRANCH: 'main'
+    #The ref of the dev branch we work against
+    STAGING_BRANCH_REF: 'refs/heads/f-staging'
+    STAGING_BRANCH: 'f-staging'
+    #The ref of the dev branch we work against
+    DEV_BRANCH_REF: 'refs/heads/dev'
+    DEV_BRANCH: 'dev'
+    # Metaflow requires a username to run
+    USERNAME: 'node'
+
+phases:
+  install:
+    commands:
+      - export $(xargs < envs/bridge/$NODE_ENV.env)
+      - printenv
+      - echo "NPM installation..."
+      - npm ci --cache .npm
+      - if [ "$GIT_BRANCH" = "$MAIN_BRANCH" ]; then export NODE_ENV=production; elif [ "$GIT_BRANCH" = "$STAGING_BRANCH" ]; then export NODE_ENV=staging; fi;
+      - echo "Environment $NODE_ENV"
+      - echo "App image tag $APP_IMAGE_TAG"
+      - cd src/stacks/bridge-be
+      - cdktf synth
+      - cd cdktf.out/stacks/bridge-ecs
+      - TF_LOG=DEBUG terraform init
+  build:
+    commands:
+      - echo "Building CDKTF Application on `date`"
+      - terraform apply -auto-approve #-no-color
+  post_build:
+    commands:
+      - echo "Copy taskdef.json, appspec.json, imagedefinitions.json to root"
+      - cp *.json ../../../../../../
+      # get back to the root dir
+      - cd ../../../../../../
+      - echo "CDKTF Build Completed on `date`"
+artifacts:
+  files:
+    - taskdef_bridge-be.json
+    - appspec_bridge-be.json
+    - imagedefinitions_bridge-be-async-processor.json

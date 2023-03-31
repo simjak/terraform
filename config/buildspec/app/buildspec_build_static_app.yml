@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    commands: 
+      - echo Install phase started...
+  pre_build:
+    commands:
+      - set -e
+      - echo Pre_build phase started...
+      - echo Setting environment variables
+      - export $(xargs < .env.$ENVIRONMENT)
+      - printenv
+      - ls -la
+      - echo "NPM installation..."
+      - npm ci --cache .npm
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo "NPM build..."
+      - npm run build
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - ls -la
+artifacts:
+  files:
+    - '**/*'
+  base-directory: build
